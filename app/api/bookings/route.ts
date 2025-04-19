@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-import { canBookForDate, toGMT530, isWeekendInGMT530 } from '@/app/utils/date';
+import { canBookForDate, toGMT, isWeekendInGMT } from '@/app/utils/date';
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,12 +49,12 @@ export async function POST(request: NextRequest) {
     const endDate = new Date(date);
     endDate.setHours(endHour, endMinute, 59, 0);
 
-    // Convert to GMT +5:30 for consistent timezone handling
-    const startDateGMT530 = toGMT530(startDate);
-    const endDateGMT530 = toGMT530(endDate);
+    // Convert to GMT (UTC) for consistent timezone handling
+    const startDateGMT = toGMT(startDate);
+    const endDateGMT = toGMT(endDate);
 
     // Log for debugging
-    console.log(`Booking time - Local: ${startDate.toLocaleString()}, GMT+5:30: ${startDateGMT530.toLocaleString()}, ISO: ${startDate.toISOString()}, Timezone offset: ${timezoneOffset}`);
+    console.log(`Booking time - Local: ${startDate.toLocaleString()}, GMT (UTC): ${startDateGMT.toLocaleString()}, ISO: ${startDate.toISOString()}, Timezone offset: ${timezoneOffset}`);
 
     // Check if booking is allowed (after 10pm the previous day)
     if (!canBookForDate(startDate)) {
@@ -82,47 +82,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if the date is a weekend in GMT +5:30 timezone
-    const isWeekend = isWeekendInGMT530(startDate);
+    // Check if the date is a weekend in GMT (UTC) timezone
+    const isWeekend = isWeekendInGMT(startDate);
 
-    // Get the operating hours range in GMT +5:30 (8:00 AM to 2:00 AM the next day)
-    // Start with the date in GMT +5:30
-    const operatingStartDateGMT530 = new Date(startDateGMT530);
-    operatingStartDateGMT530.setHours(8, 0, 0, 0);
+    // Get the operating hours range in GMT (UTC) (8:00 AM to 2:00 AM the next day)
+    // Start with the date in GMT (UTC)
+    const operatingStartDateGMT = new Date(startDateGMT);
+    operatingStartDateGMT.setHours(8, 0, 0, 0);
 
-    const operatingEndDateGMT530 = new Date(startDateGMT530);
-    operatingEndDateGMT530.setDate(operatingEndDateGMT530.getDate() + 1);
-    operatingEndDateGMT530.setHours(2, 0, 0, 0);
+    const operatingEndDateGMT = new Date(startDateGMT);
+    operatingEndDateGMT.setDate(operatingEndDateGMT.getDate() + 1);
+    operatingEndDateGMT.setHours(2, 0, 0, 0);
 
-    // Get the date part only in GMT +5:30 format (YYYY-MM-DD)
-    const dateOnlyGMT530 = startDateGMT530.toISOString().split('T')[0];
+    // Get the date part only in GMT (UTC) format (YYYY-MM-DD)
+    const dateOnlyGMT = startDateGMT.toISOString().split('T')[0];
 
     // Log for debugging
-    console.log(`Date in GMT+5:30: ${dateOnlyGMT530}, Is weekend: ${isWeekend}`);
-    console.log(`Operating hours in GMT+5:30: ${operatingStartDateGMT530.toISOString()} to ${operatingEndDateGMT530.toISOString()}`);
+    console.log(`Date in GMT (UTC): ${dateOnlyGMT}, Is weekend: ${isWeekend}`);
+    console.log(`Operating hours in GMT (UTC): ${operatingStartDateGMT.toISOString()} to ${operatingEndDateGMT.toISOString()}`);
 
     // Count how many bookings the user already has for this date
-    // We'll use a simpler approach by just checking the date part in GMT +5:30
+    // We'll use a simpler approach by just checking the date part in GMT (UTC)
+    // Prepare the query to get existing bookings
+    const whereClause: any = { userId };
+
+    // If bookingId is provided (for updates), exclude it from the count
+    if (body.bookingId) {
+      whereClause.NOT = { id: body.bookingId };
+    }
+
     const existingBookings = await prisma.booking.findMany({
-      where: {
-        userId,
-      },
+      where: whereClause,
       select: {
         startTime: true,
       },
     });
 
-    // Filter bookings that fall on the same date in GMT +5:30
+    // Filter bookings that fall on the same date in GMT (UTC)
     const bookingsOnSameDate = existingBookings.filter(booking => {
-      const bookingTimeGMT530 = toGMT530(new Date(booking.startTime));
-      const bookingDateGMT530 = bookingTimeGMT530.toISOString().split('T')[0];
-      return bookingDateGMT530 === dateOnlyGMT530;
+      const bookingTimeGMT = toGMT(new Date(booking.startTime));
+      const bookingDateGMT = bookingTimeGMT.toISOString().split('T')[0];
+      return bookingDateGMT === dateOnlyGMT;
     });
 
     const userBookingsInRange = bookingsOnSameDate.length;
 
     // Log for debugging
-    console.log(`User has ${userBookingsInRange} bookings on ${dateOnlyGMT530}`);
+    console.log(`User has ${userBookingsInRange} bookings on ${dateOnlyGMT}`);
 
     if (isWeekend) {
       // On weekends, users can book up to 2 slots

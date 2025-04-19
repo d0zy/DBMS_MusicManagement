@@ -94,10 +94,10 @@ A web application for managing a music club, including room bookings, instrument
 
 ## Technical Implementation Notes
 
-- The system uses GMT +5:30 timezone for all date-based validations
+- The system uses GMT (UTC) timezone for all date-based validations
 - This approach simplifies the validation logic for booking limits across day boundaries
-- Weekend determination (for booking limits) is based on the day of week in GMT +5:30
-- All booking slots are generated and validated in GMT +5:30 timezone
+- Weekend determination (for booking limits) is based on the day of week in GMT (UTC)
+- All booking slots are generated and validated in GMT (UTC) timezone
 - The frontend displays times in the user's local timezone
 
 ## Learn More

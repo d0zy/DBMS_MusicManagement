@@ -66,7 +66,7 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
         setLoadingSlots(true);
         setSlotsError(null);
 
-        const response = await fetch(`/api/available-slots?roomId=${selectedRoom.id}&date=${date}`);
+        const response = await fetch(`/api/available-slots?roomId=${selectedRoom.id}&date=${date}&userId=${userId}`);
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -335,7 +335,12 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
 
                 {!loadingSlots && !slotsError && availableSlots.length === 0 && date && selectedRoom && (
                   <div className="p-4 bg-gray-50 rounded-md">
-                    <p className="text-sm">No available slots for this date. Please try another date.</p>
+                    <p className="text-sm">No available slots for this date. This could be because:</p>
+                    <ul className="text-sm list-disc list-inside mt-2">
+                      <li>All slots are already booked</li>
+                      <li>You've reached your booking limit (1 slot on weekdays, 2 slots on weekends)</li>
+                    </ul>
+                    <p className="text-sm mt-2">Please try another date or check your existing bookings.</p>
                   </div>
                 )}
 

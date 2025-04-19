@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
-import { canBookForDate } from '@/app/utils/date';
+import { canBookForDate, toGMT530, isWeekendInGMT530 } from '@/app/utils/date';
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,8 +49,12 @@ export async function POST(request: NextRequest) {
     const endDate = new Date(date);
     endDate.setHours(endHour, endMinute, 59, 0);
 
+    // Convert to GMT +5:30 for consistent timezone handling
+    const startDateGMT530 = toGMT530(startDate);
+    const endDateGMT530 = toGMT530(endDate);
+
     // Log for debugging
-    console.log(`Booking time - Local: ${startDate.toLocaleString()}, ISO: ${startDate.toISOString()}, Timezone offset: ${timezoneOffset}`);
+    console.log(`Booking time - Local: ${startDate.toLocaleString()}, GMT+5:30: ${startDateGMT530.toLocaleString()}, ISO: ${startDate.toISOString()}, Timezone offset: ${timezoneOffset}`);
 
     // Check if booking is allowed (after 10pm the previous day)
     if (!canBookForDate(startDate)) {
@@ -78,28 +82,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if the date is a weekend (Saturday = 6, Sunday = 0)
-    const dayOfWeek = startDate.getDay();
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    // Check if the date is a weekend in GMT +5:30 timezone
+    const isWeekend = isWeekendInGMT530(startDate);
 
-    // Get the operating hours range (8:00 AM to 2:00 AM the next day)
-    const operatingStartDate = new Date(startDate);
-    operatingStartDate.setHours(8, 0, 0, 0);
+    // Get the operating hours range in GMT +5:30 (8:00 AM to 2:00 AM the next day)
+    // Start with the date in GMT +5:30
+    const operatingStartDateGMT530 = new Date(startDateGMT530);
+    operatingStartDateGMT530.setHours(8, 0, 0, 0);
 
-    const operatingEndDate = new Date(startDate);
-    operatingEndDate.setDate(operatingEndDate.getDate() + 1);
-    operatingEndDate.setHours(2, 0, 0, 0);
+    const operatingEndDateGMT530 = new Date(startDateGMT530);
+    operatingEndDateGMT530.setDate(operatingEndDateGMT530.getDate() + 1);
+    operatingEndDateGMT530.setHours(2, 0, 0, 0);
 
-    // Count how many bookings the user already has in the operating hours range
-    const userBookingsInRange = await prisma.booking.count({
+    // Get the date part only in GMT +5:30 format (YYYY-MM-DD)
+    const dateOnlyGMT530 = startDateGMT530.toISOString().split('T')[0];
+
+    // Log for debugging
+    console.log(`Date in GMT+5:30: ${dateOnlyGMT530}, Is weekend: ${isWeekend}`);
+    console.log(`Operating hours in GMT+5:30: ${operatingStartDateGMT530.toISOString()} to ${operatingEndDateGMT530.toISOString()}`);
+
+    // Count how many bookings the user already has for this date
+    // We'll use a simpler approach by just checking the date part in GMT +5:30
+    const existingBookings = await prisma.booking.findMany({
       where: {
         userId,
-        startTime: {
-          gte: operatingStartDate,
-          lt: operatingEndDate,
-        },
+      },
+      select: {
+        startTime: true,
       },
     });
+
+    // Filter bookings that fall on the same date in GMT +5:30
+    const bookingsOnSameDate = existingBookings.filter(booking => {
+      const bookingTimeGMT530 = toGMT530(new Date(booking.startTime));
+      const bookingDateGMT530 = bookingTimeGMT530.toISOString().split('T')[0];
+      return bookingDateGMT530 === dateOnlyGMT530;
+    });
+
+    const userBookingsInRange = bookingsOnSameDate.length;
+
+    // Log for debugging
+    console.log(`User has ${userBookingsInRange} bookings on ${dateOnlyGMT530}`);
 
     if (isWeekend) {
       // On weekends, users can book up to 2 slots

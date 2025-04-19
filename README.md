@@ -85,12 +85,20 @@ A web application for managing a music club, including room bookings, instrument
 - Operating hours are from 8:00 AM to 2:00 AM the next day
 - All booking slots are 59 minutes (e.g., 8:00 - 8:59)
 - Bookings must start at round hours (e.g., 8:00, 9:00)
-- Bookings after midnight (e.g., 1:00 AM on April 20th) are counted as bookings for the previous day (April 19th)
+- Bookings after midnight (00:00 and 1:00 AM) are displayed as next day slots but are counted as bookings for the previous day (e.g., 00:00 AM on April 20th is counted as a booking for April 19th)
 - Only available slots are displayed for selection
 - On weekdays, one person can book only 1 slot per day in the range 8:00 AM to 2:00 AM the next day
 - On weekends (Saturday and Sunday), one person can book up to 2 slots per day
 - Bookings are subject to availability
 - Users must be logged in to book a room
+
+## Technical Implementation Notes
+
+- The system uses GMT +5:30 timezone for all date-based validations
+- This approach simplifies the validation logic for booking limits across day boundaries
+- Weekend determination (for booking limits) is based on the day of week in GMT +5:30
+- All booking slots are generated and validated in GMT +5:30 timezone
+- The frontend displays times in the user's local timezone
 
 ## Learn More
 

@@ -26,6 +26,7 @@ interface AvailableSlot {
   startHour: number;
   formattedStartTime: string;
   formattedEndTime: string;
+  isNextDay?: boolean;
 }
 
 export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
@@ -37,6 +38,7 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
 
   // Update end time to be 59 minutes after start time whenever start time changes
   const updateEndTime = (newStartTime: string) => {
@@ -78,6 +80,7 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
         if (startTime && !slots.some(slot => slot.formattedStartTime === startTime)) {
           setStartTime('');
           setEndTime('');
+          setSelectedSlot(null);
         }
       } catch (err) {
         if (err instanceof Error) {
@@ -98,6 +101,7 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
   const handleSlotSelect = (slot: AvailableSlot) => {
     setStartTime(slot.formattedStartTime);
     setEndTime(slot.formattedEndTime);
+    setSelectedSlot(slot);
     setTimeError(null);
   };
 
@@ -157,13 +161,29 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
       const [startHour, startMinute] = startTime.split(':').map(Number);
       const [endHour, endMinute] = endTime.split(':').map(Number);
 
-      const startDateTime = new Date(date);
+      // Create a date object for the selected date
+      const bookingDate = new Date(date);
+
+      // If the selected slot is for the next day, increment the date
+      const nextDayDate = new Date(bookingDate);
+      if (selectedSlot?.isNextDay) {
+        nextDayDate.setDate(nextDayDate.getDate() + 1);
+      }
+
+      // Use the appropriate date based on whether the slot is for the next day
+      const dateToUse = selectedSlot?.isNextDay ? nextDayDate : bookingDate;
+
+      // Create the start and end date objects
+      const startDateTime = new Date(dateToUse);
       startDateTime.setHours(startHour, startMinute, 0, 0);
 
-      const endDateTime = new Date(date);
+      const endDateTime = new Date(dateToUse);
       endDateTime.setHours(endHour, endMinute, 59, 0);
 
       // Send date components separately to preserve local time
+      // Format the date to YYYY-MM-DD format for the API
+      const formattedDate = dateToUse.toISOString().split('T')[0];
+
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: {
@@ -172,7 +192,7 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
         body: JSON.stringify({
           userId,
           roomId: selectedRoom?.id,
-          date,
+          date: formattedDate, // Use the adjusted date
           startHour,
           startMinute,
           endHour,
@@ -180,6 +200,8 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
           purpose,
           // Include timezone offset for debugging
           timezoneOffset: new Date().getTimezoneOffset(),
+          // Include isNextDay flag for debugging
+          isNextDay: selectedSlot?.isNextDay || false,
         }),
       });
 
@@ -197,6 +219,7 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
       setStartTime("");
       setEndTime("");
       setPurpose("");
+      setSelectedSlot(null);
 
       if (onSuccess) {
         onSuccess();
@@ -245,6 +268,10 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
                   onSelectRoom={(room) => {
                     setSelectedRoom(room);
                     setRoomError(null);
+                    // Reset time selection when room changes
+                    setStartTime('');
+                    setEndTime('');
+                    setSelectedSlot(null);
                   }}
                   selectedRoomId={selectedRoom?.id}
                 />
@@ -260,6 +287,10 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
                 onChange={(e) => {
                   setDate(e.target.value);
                   setDateError(null);
+                  // Reset time selection when date changes
+                  setStartTime('');
+                  setEndTime('');
+                  setSelectedSlot(null);
                 }}
                 error={dateError || undefined}
                 min={new Date().toISOString().split('T')[0]}
@@ -302,6 +333,9 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
                         onClick={() => handleSlotSelect(slot)}
                       >
                         {slot.formattedStartTime}
+                        {slot.isNextDay && (
+                          <span className="ml-1 text-xs text-blue-600">(next day)</span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -332,7 +366,8 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
           <p>Note: Rooms can only be booked after 10pm the previous day.</p>
           <p>Operating hours are from 8:00 AM to 2:00 AM the next day.</p>
           <p>All booking slots are 59 minutes (e.g., 8:00-8:59) and must start at round hours (e.g., 8:00, 9:00).</p>
-          <p>Bookings after midnight (e.g., 1:00 AM on April 20th) are counted as bookings for the previous day (April 19th).</p>
+          <p>Bookings after midnight (e.g., 00:00 and 1:00 AM) are for the next day and are marked as "(next day)".</p>
+          <p>These bookings (e.g., 00:00 and 1:00 AM on April 20th) are counted as bookings for the previous day (April 19th).</p>
           <p>On weekdays, you can book only 1 slot per day in the range 8:00 AM to 2:00 AM the next day.</p>
           <p>On weekends (Saturday and Sunday), you can book up to 2 slots per day.</p>
           <p>Only available slots are displayed for selection.</p>

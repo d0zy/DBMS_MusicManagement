@@ -134,8 +134,28 @@ export function BookingForm({ userId, userName, onSuccess }: BookingFormProps) {
 
     // Check if end time is after start time
     if (startTime && endTime) {
-      const startDateTime = new Date(`${date}T${startTime}`);
-      const endDateTime = new Date(`${date}T${endTime}`);
+      // Create a date object for the selected date
+      const bookingDate = new Date(date);
+
+      // If the selected slot is for the next day, increment the date for validation
+      const nextDayDate = new Date(bookingDate);
+      if (selectedSlot?.isNextDay) {
+        nextDayDate.setDate(nextDayDate.getDate() + 1);
+      }
+
+      // Use the appropriate date based on whether the slot is for the next day
+      const dateToUse = selectedSlot?.isNextDay ? nextDayDate : bookingDate;
+
+      // Parse the time strings
+      const [startHour, startMinute] = startTime.split(':').map(Number);
+      const [endHour, endMinute] = endTime.split(':').map(Number);
+
+      // Create the start and end date objects
+      const startDateTime = new Date(dateToUse);
+      startDateTime.setHours(startHour, startMinute, 0, 0);
+
+      const endDateTime = new Date(dateToUse);
+      endDateTime.setHours(endHour, endMinute, 59, 0);
 
       if (endDateTime <= startDateTime) {
         setTimeError("End time must be after start time");
